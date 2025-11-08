@@ -8,6 +8,8 @@ class Llm_Service:
         self.model = model
         if model == "gpt-4o":
             self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        if model == "whisper-1":
+            self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
         pass
 
     async def extract_data_from_llm(self, text: str, system_prompt = None):
@@ -41,3 +43,16 @@ class Llm_Service:
             chunks.append(chunk_text)
             start += max_tokens - overlap
         return chunks
+
+    def extract_transcription_from_audio(self, audio_file_path: str):
+        try:
+            file = open(audio_file_path, "rb")
+            transcript = self.client.audio.transcriptions.create(
+                    model=self.model,
+                    file=file
+                )
+            return transcript
+        except Exception as e:
+            print(f"Error extracting transcription: {e}")
+            return None
+        

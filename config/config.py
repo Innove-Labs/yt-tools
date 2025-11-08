@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "sds")
     YT_GOOGLE_API_KEY: str = os.getenv("YT_GOOGLE_API_KEY", "your-youtube-api-key")
     YT_COOKIES: str = os.getenv("YT_COOKIES", "your-youtube-cookies")
+    COOKIES_FILE: str = os.getenv("COOKIES_FILE", "your-cookie-file")
 
     class Config:
         env_file = ".env"

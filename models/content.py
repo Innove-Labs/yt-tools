@@ -1,12 +1,18 @@
 from enums import JobStatus  # your custom enum
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from schemas import SocialModal, BlogModel
+from bson import ObjectId
 
 
 class ContentJobOut(BaseModel):
     id: str = Field(..., alias="_id")
+    @validator("id", pre=True)
+    def objectid_to_str(cls, v):
+        if isinstance(v, ObjectId):
+            return str(v)
+        return v
     status: JobStatus
     context: Optional[str] = None
     error: Optional[str] = None

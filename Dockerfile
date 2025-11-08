@@ -1,3 +1,5 @@
+# docker build -t fawazsullia/micro-apis:0.0.3 .
+
 # Use an official Python image
 FROM python:3.12-slim
 

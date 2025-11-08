@@ -7,11 +7,13 @@ from typing import Optional, Tuple, List, Union
 import json
 import tempfile
 from config import settings
+from .llm_service import Llm_Service
 
 # YouTube Transcript API imports
 try:
     from youtube_transcript_api import YouTubeTranscriptApi
     from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
+
     YOUTUBE_TRANSCRIPT_API_AVAILABLE = True
 except ImportError:
     YOUTUBE_TRANSCRIPT_API_AVAILABLE = False
@@ -42,7 +44,6 @@ try:
 except ImportError:
     REQUESTS_AVAILABLE = False
     print("requests not available. Install with: pip install requests")
-
 
 class YouTubeTranscriptExtractor:
     """
@@ -216,13 +217,7 @@ class YouTubeTranscriptExtractor:
             
         if lang is None:
             lang = self.default_language
-
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as tmp_cookie_file:
-            tmp_cookie_file.write(settings.YT_COOKIES)
-            tmp_cookie_file_path = tmp_cookie_file.name
-            
         ydl_opts = {
-            'cookies': tmp_cookie_file_path,
             'writesubtitles': True,
             'writeautomaticsub': True,
             'subtitleslangs': [lang, 'en'],
@@ -234,8 +229,7 @@ class YouTubeTranscriptExtractor:
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 # Extract info without downloading
-                info_dict = ydl.extract_info(video_url, download=False)
-                
+                info_dict = ydl.extract_info(video_url, download=False)                
                 # Check if subtitles are available
                 if 'subtitles' in info_dict and info_dict['subtitles']:
                     # Try manual subtitles first
@@ -250,6 +244,8 @@ class YouTubeTranscriptExtractor:
                 
                 # Try automatic subtitles
                 if 'automatic_captions' in info_dict and info_dict['automatic_captions']:
+                    # list down the languages
+                    # languaes are keys in info_dict['automatic_captions']
                     for lang_code in [lang, 'en']:
                         if lang_code in info_dict['automatic_captions']:
                             subtitle_url = info_dict['automatic_captions'][lang_code][0]['url']
@@ -330,6 +326,60 @@ class YouTubeTranscriptExtractor:
             print(f"Error in speech recognition: {e}")
             return None
     
+    def download_audio_ytdlp(self, video_url: str, proxy: str = None, cookies_file: str = None) -> str:
+        """
+        Downloads audio from a YouTube video using yt-dlp and returns the temp file path.
+        Compatible with OpenAI Whisper API.
+        """
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_file:
+            temp_file_path = temp_file.name
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': temp_file_path,  # e.g., temp_file_path = tempfile.mktemp(suffix=".mp3")
+            'quiet': True,
+            'noplaylist': True,
+            'overwrites': True,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+        }
+
+        if proxy:
+            ydl_opts['proxy'] = proxy
+        if cookies_file:
+            ydl_opts['cookiefile'] = cookies_file
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([video_url])
+
+        return f"{temp_file_path}.mp3"
+
+    def transcribe_with_whisper_api(self, video_url: str, whisper_model: str = 'whisper-1') -> Optional[str]:
+        """
+        Use OpenAI Whisper API for transcription (cloud, no local model required).
+
+        Args:
+        video_url: YouTube video URL
+        whisper_model: OpenAI Whisper model (default 'whisper-1')
+
+        Returns:
+            Transcript text or None
+        """
+        try:
+            # Download audio from YouTube
+            temp_audio_path = self.download_audio_ytdlp(video_url)
+            # Transcribe using OpenAI Whisper API
+            llm_service = Llm_Service('whisper-1')
+            transcript = llm_service.extract_transcription_from_audio(temp_audio_path)
+            os.remove(temp_audio_path)
+            return transcript.text
+
+        except Exception as e:
+            print(f"Error with Whisper API transcription: {e}")
+            return None
+   
     def save_transcript(self, transcript: Union[str, List], filename: str) -> bool:
         """
         Save transcript to file.
@@ -390,6 +440,13 @@ class YouTubeTranscriptExtractor:
         if ytdlp_text:
             print(f"✓ Found {ytdlp_type} transcript with yt-dlp!")
             return ytdlp_text, f"ytdlp_{ytdlp_type}"
+    
+        if use_whisper:
+            print("Trying Method 3: Whisper API transcription...")
+            whisper_text = self.transcribe_with_whisper_api(video_url, whisper_model)
+            if whisper_text:
+                print("✓ Whisper API transcription successful!")
+                return whisper_text, "whisper_api"
         
         # Method 4: Speech recognition (last resort)
         print("Trying Method 4: Speech recognition...")

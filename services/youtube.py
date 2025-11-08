@@ -29,7 +29,7 @@ class YoutubeService:
         logging.info(f"Extracting transcript for link: {link}")
         # video_id = self.extract_video_id(link)
         yt_trnscript_extractor = YouTubeTranscriptExtractor()
-        transcript = yt_trnscript_extractor.get_transcript(link)
+        transcript = yt_trnscript_extractor.get_transcript(link, None, True, None)
         return transcript
     
     def extract_video_id(self, link: str) -> None:
@@ -136,8 +136,8 @@ class YoutubeService:
             return { "message": "Content already exists." }
         
         extract_transcript = await self.extract_transcript(request.link)
-        if(len(extract_transcript) == 0):
-            raise HTTPException(status_code=400, detail="No transcript found for the given link.")
+        if not extract_transcript[0]:
+            return { "message": "No transcript found.", "status": False }
         content = ContentModel(
             userId=str(current_user.id),
             link=request.link,
