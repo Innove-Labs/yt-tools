@@ -28,7 +28,7 @@ workflows:
   build_and_publish:
     jobs:
       - build-and-push:
-          context: docker-hub-creds
+          context: docker
           filters:
             branches:
               only: deploy
