@@ -6,7 +6,6 @@ jobs:
       - image: cimg/base:stable  # Base image with Docker CLI
     steps:
       - checkout
-
       - setup_remote_docker
 
       - run:
